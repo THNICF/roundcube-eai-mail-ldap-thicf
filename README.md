@@ -1,16 +1,19 @@
-Roundcube Webmail 
+Roundcube Webmail - Support login with EAI mail by THNIC Foundation
 =================
-[roundcube.net](https://roundcube.net)
+1. [roundcube.net](https://roundcube.net)
+
+2. [THNIC foundation](https://xn--42cl2bj2hxbd2g.xn--12cfi8ixb8l.xn--o3cw4h/)
 
 [![Tests Status](https://github.com/roundcube/roundcubemail/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/roundcube/roundcubemail/actions/workflows/tests.yml)
 
 ATTENTION
 ---------
-This is just a snapshot from the GIT repository and is **NOT A STABLE
+1. This is just a snapshot from the GIT repository and is **NOT A STABLE
 version of Roundcube**. It's not recommended to replace an existing installation
 of Roundcube with this version. Also using a separate database for this
 installation is highly recommended.
 
+2. This is a modified version by [THNIC foundation](https://xn--42cl2bj2hxbd2g.xn--12cfi8ixb8l.xn--o3cw4h/) to make a Roundcube Webmail can loging by using EAI (Email Address Internationalization) focus on Thai language. 
 
 INTRODUCTION
 ------------
@@ -24,6 +27,8 @@ easily extendable and the user interface is fully customizable using skins.
 The code designed to run on a webserver is mainly written in PHP and Javascript.
 It includes a custom framework with an IMAP library derived from [IlohaMail][iloha]
 and requires a set of external libraries (see composer.json and jsdeps.json files).
+
+THNIC Foundation forked and modified code to support login by [EAI email](https://xn--12cn4frcvb5f.xn--o3cw4h/%e0%b8%8a%e0%b8%b7%e0%b9%88%e0%b8%ad%e0%b8%ad%e0%b8%b5%e0%b9%80%e0%b8%a1%e0%b8%a5%e0%b8%a0%e0%b8%b2%e0%b8%a9%e0%b8%b2%e0%b9%84%e0%b8%97%e0%b8%a2-eai/)
 
 
 INSTALLATION
@@ -47,6 +52,37 @@ inherits the browser support from there. This currently includes:
 - Safari: (Current - 1) and Current
 - Opera: Current
 
+How to make Roundcube can login with EAI mail
+---------------
+Roundcube Webmail is used by [THNIC foundation](https://xn--42cl2bj2hxbd2g.xn--12cfi8ixb8l.xn--o3cw4h/) and it is not UA-Ready (Universal Aceeptance) platform because it cannot use other languages email except English to login. Then, [THNIC foundation](https://xn--42cl2bj2hxbd2g.xn--12cfi8ixb8l.xn--o3cw4h/) modified it by query English email when THNIC fondation users used Thai email.
+
+For example, ไทย@อีเอไอ.ไทย and thai@eai.in.th, the added function will find thai@eai.in.th and use it as username for login instead of อีเอไอ@คน.ไทย when users use Thai email to login.
+
+The function named "map_users" is in index.php:
+
+```
+function map_users(&$auth){
+  $conn = new mysqli("localhost", "your-db-user", "your-db-password", "your-database");
+  if ($conn->connect_error) {
+      error_log("Connection failed: " . $conn->connect_error,0);
+  }
+  //youremailmappingtable = the table that have record of your EAI mail and english email from $auth['user']
+  $result = $conn->query("SELECT yourenglishemail FROM youremailmappingtable WHERE youreaiemail='".$auth['user']."'");
+  if ($result->num_rows > 0) {
+      $row = $result->fetch_row();
+      $auth['user'] = $row['0'];
+  }
+}
+map_users($auth);
+```
+Here the basic sql for create mapping email table:
+
+```
+CREATE TABLE youremailmappingtable (youreaiemail varchar(80) NOT NULL, yourenglishemail TEXT NOT NULL, PRIMARY KEY (youreaiemail) ); 
+INSERT INTO youremailmappingtable (youreaiemail,yourenglishemail) VALUES ('ไทย@อีเอไอ.ไทย','thai@eai.in.th');
+```
+
+This is not the best solution yet. Please feel free to fork or modified this repositories.
 
 LICENSE
 -------
@@ -78,22 +114,20 @@ For more details about licensing and the exceptions for skins and plugins
 see [roundcube.net/license][license]
 
 
-CONTRIBUTION
-------------
-Want to help make Roundcube the best webmail solution ever?
-Roundcube is open source software. Our developers and contributors all
-are volunteers and we're always looking for new additions and resources.
-For more information visit [roundcube.net/contribute][contrib]
-
-
 CONTACT
 -------
 For bug reports or feature requests please refer to the tracking system
 at [Github][githubissues] or subscribe to our mailing list.
 See [roundcube.net/support][support] for details.
 
-You're always welcome to send a message to the project admin:
-hello(at)roundcube(dot)net
+You're always welcome to send a message to THNIC Foundation:
+info(at)thnic(dot)or(dot)th.
+
+MORE INFORMATION
+----------------
+1. [THNIC foundation](https://xn--42cl2bj2hxbd2g.xn--12cfi8ixb8l.xn--o3cw4h/)
+
+2. [รู้จัก.ไทย](https://xn--12cn4frcvb5f.xn--o3cw4h/)
 
 
 [iloha]:        https://sourceforge.net/projects/ilohamail/
