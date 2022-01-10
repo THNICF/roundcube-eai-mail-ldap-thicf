@@ -114,10 +114,81 @@ if ($RCMAIL->task == 'login' && $RCMAIL->action == 'login') {
             'cookiecheck' => true,
     ]);
 
+    //Get your English Email user from Thai Email user in LDAP
+    //Example cn=radmin,dc=eai,dc=th
+    //Exmaple ou=eai.in.th,ou=domains,dc=eai,dc=th
+    list($local, $domain) = explode('@', $auth['user']);
+    exec('ldapsearch -H ldaps://your_ldap_rul -D "cn=your_cn_value,dc=your_dc_value,dc=your_dc_value" -w "your_ldap_password" -b "ou=your_ou_value,ou=domains,dc=your_dc_value,dc=your_dc_value" -s sub "(cano='.$local.')" | grep "cn:"', $resp, $returnResp);
+    if($returnResp==0) {
+        $auth['user'] = substr($resp[0],4) . '@' . "your.email.value";
+    }
+
     // Login
     if ($auth['valid'] && !$auth['abort']
         && $RCMAIL->login($auth['user'], $auth['pass'], $auth['host'], $auth['cookiecheck'])
     ) {
+        //Connected to LDAP
+        function open_ldap_connection() {
+            global $log_prefix, $LDAP, $SENT_HEADERS, $LDAP_DEBUG;
+            $LDAP['uri'] = "ldaps://your_ldap_rul";
+            $LDAP['admin_bind_dn'] = "dc=your_dc_value,dc=your_dc_value";
+            $LDAP['admin_bind_pwd'] = "your_ldap_password";
+            $log_prefix = date('Y-m-d H:i:s') . " - LDAP manager ";
+
+            $ldap_connection = @ ldap_connect($LDAP['uri']);
+            if (!$ldap_connection) {
+                print "Problem: Can't connect to the LDAP server at ${LDAP['uri']}";
+                die("Can't connect to the LDAP server at ${LDAP['uri']}");
+                exit(1);
+            }
+            ldap_set_option($ldap_connection, LDAP_OPT_PROTOCOL_VERSION, 3);
+            if(!preg_match("/^ldaps:/", $LDAP['uri'])) {
+                $tls_result = @ ldap_start_tls($ldap_connection);
+                if ($tls_result != TRUE) {
+                    error_log("$log_prefix Failed to start STARTTLS connection to ${LDAP['uri']}: " . ldap_error($ldap_connection),0);
+                    if ($LDAP["require_starttls"] == TRUE) {
+                        print "<div style='position: fixed;bottom: 0;width: 100%;' class='alert alert-danger'>Fatal:  Couldn't create a secure connection to ${LDAP['uri']} and LDAP_REQUIRE_STARTTLS is TRUE.</div>";
+                        exit(0);
+                    } else {
+                        if ($SENT_HEADERS == TRUE) {
+                            print "<div style='position: fixed;bottom: 0px;width: 100%;height: 20px;border-bottom:solid 20px yellow;'>WARNING: Insecure LDAP connection to ${LDAP['uri']}</div>";
+                        }
+                        ldap_close($ldap_connection);
+                        $ldap_connection = @ ldap_connect($LDAP['uri']);
+                        ldap_set_option($ldap_connection, LDAP_OPT_PROTOCOL_VERSION, 3);
+                    }
+                } else if ($LDAP_DEBUG == TRUE) {
+                    error_log("$log_prefix Start STARTTLS connection to ${LDAP['uri']}",0);
+                }
+            }
+            $bind_result = @ ldap_bind( $ldap_connection, $LDAP['admin_bind_dn'], $LDAP['admin_bind_pwd']);
+
+            if ($bind_result != TRUE) {
+                $this_error = "Failed to bind to ${LDAP['uri']} as ${LDAP['admin_bind_dn']}";
+                if ($LDAP_DEBUG == TRUE) {
+                    $this_error .= " with password ${LDAP['admin_bind_pwd']}";
+                }
+                $this_error .= ": " . ldap_error($ldap_connection);
+                print "Problem: Failed to bind as ${LDAP['admin_bind_dn']}";
+                error_log("$log_prefix $this_error",0);
+                exit(1);
+            } else if ($LDAP_DEBUG == TRUE) {
+                error_log("$log_prefix Bound to ${LDAP['uri']} as ${LDAP['admin_bind_dn']}",0);
+            }
+            return $ldap_connection;
+        }
+
+        //Updte login time to your ldap server
+        //Example ou=people,ou=eai.in.th,ou=domains,dc=eai,dc=th
+        function ldap_log($user) {
+            $ldap_connection = open_ldap_connection();
+            $to_update["lastlogintime"] = time();
+            list($local, $domain) = explode('@', $user);
+            $updated_login_log = ldap_mod_replace($ldap_connection, "cn=$local,ou=your_ou_value,ou=your_ou_value,ou=domains,dc=your_dc_value,dc=your_dc_value", $to_update);
+        }
+        ldap_log($auth['user']);
+        //ldap connection
+
         // create new session ID, don't destroy the current session
         // it was destroyed already by $RCMAIL->kill_session() above
         $RCMAIL->session->remove('temp');
