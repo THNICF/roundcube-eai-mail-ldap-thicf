@@ -1,4 +1,4 @@
-Roundcube Webmail - Support login with EAI mail by THNIC Foundation
+Roundcube Webmail - Support login with EAI mail by THNIC Foundation (LDAP method)
 =================
 1. [roundcube.net](https://roundcube.net)
 
@@ -52,34 +52,84 @@ inherits the browser support from there. This currently includes:
 - Safari: (Current - 1) and Current
 - Opera: Current
 
-How to make Roundcube can login with EAI mail
+How to make Roundcube can login with EAI mail (LDAP method)
 ---------------
 Roundcube Webmail is used by [THNIC foundation](https://xn--42cl2bj2hxbd2g.xn--12cfi8ixb8l.xn--o3cw4h/) and it is not UA-Ready (Universal Aceeptance) platform because it cannot use other languages email except English to login. Then, [THNIC foundation](https://xn--42cl2bj2hxbd2g.xn--12cfi8ixb8l.xn--o3cw4h/) modified it by query English email when THNIC fondation users used Thai email.
 
 For example, ไทย@อีเอไอ.ไทย and thai@eai.in.th, the added function will find thai@eai.in.th and use it as username for login instead of อีเอไอ@คน.ไทย when users use Thai email to login.
 
-The function named "map_users" is in index.php:
+The LDAP script to get English email user from EAI email user:
 
 ```
-function map_users(&$auth){
-  $conn = new mysqli("localhost", "your-db-user", "your-db-password", "your-database");
-  if ($conn->connect_error) {
-      error_log("Connection failed: " . $conn->connect_error,0);
-  }
-  //youremailmappingtable = the table that have record of your EAI mail and english email from $auth['user']
-  $result = $conn->query("SELECT yourenglishemail FROM youremailmappingtable WHERE youreaiemail='".$auth['user']."'");
-  if ($result->num_rows > 0) {
-      $row = $result->fetch_row();
-      $auth['user'] = $row['0'];
-  }
+list($local, $domain) = explode('@', $auth['user']);
+exec('ldapsearch -H ldaps://your_ldap_rul -D "cn=your_cn_value,dc=your_dc_value,dc=your_dc_value" -w "your_ldap_password" -b  "ou=your_ou_value,ou=domains,dc=your_dc_value,dc=your_dc_value" -s sub "(cano='.$local.')" | grep "cn:"', $resp, $returnResp);
+if($returnResp==0) {
+    $auth['user'] = substr($resp[0],4) . '@' . "your.email.value";
 }
-map_users($auth);
 ```
-Here the basic sql for create mapping email table:
+
+The LDAP script to save log data to your ldap (Can delete if not use):
 
 ```
-CREATE TABLE youremailmappingtable (youreaiemail varchar(80) NOT NULL, yourenglishemail TEXT NOT NULL, PRIMARY KEY (youreaiemail) ); 
-INSERT INTO youremailmappingtable (youreaiemail,yourenglishemail) VALUES ('ไทย@อีเอไอ.ไทย','thai@eai.in.th');
+       function open_ldap_connection() {
+            global $log_prefix, $LDAP, $SENT_HEADERS, $LDAP_DEBUG;
+            $LDAP['uri'] = "ldaps://your_ldap_rul";
+            $LDAP['admin_bind_dn'] = "dc=your_dc_value,dc=your_dc_value";
+            $LDAP['admin_bind_pwd'] = "your_ldap_password";
+            $log_prefix = date('Y-m-d H:i:s') . " - LDAP manager ";
+
+            $ldap_connection = @ ldap_connect($LDAP['uri']);
+            if (!$ldap_connection) {
+                print "Problem: Can't connect to the LDAP server at ${LDAP['uri']}";
+                die("Can't connect to the LDAP server at ${LDAP['uri']}");
+                exit(1);
+            }
+            ldap_set_option($ldap_connection, LDAP_OPT_PROTOCOL_VERSION, 3);
+            if(!preg_match("/^ldaps:/", $LDAP['uri'])) {
+                $tls_result = @ ldap_start_tls($ldap_connection);
+                if ($tls_result != TRUE) {
+                    error_log("$log_prefix Failed to start STARTTLS connection to ${LDAP['uri']}: " . ldap_error($ldap_connection),0);
+                    if ($LDAP["require_starttls"] == TRUE) {
+                        print "<div style='position: fixed;bottom: 0;width: 100%;' class='alert alert-danger'>Fatal:  Couldn't create a secure connection to ${LDAP['uri']} and LDAP_REQUIRE_STARTTLS is TRUE.</div>";
+                        exit(0);
+                    } else {
+                        if ($SENT_HEADERS == TRUE) {
+                            print "<div style='position: fixed;bottom: 0px;width: 100%;height: 20px;border-bottom:solid 20px yellow;'>WARNING: Insecure LDAP connection to ${LDAP['uri']}</div>";
+                        }
+                        ldap_close($ldap_connection);
+                        $ldap_connection = @ ldap_connect($LDAP['uri']);
+                        ldap_set_option($ldap_connection, LDAP_OPT_PROTOCOL_VERSION, 3);
+                    }
+                } else if ($LDAP_DEBUG == TRUE) {
+                    error_log("$log_prefix Start STARTTLS connection to ${LDAP['uri']}",0);
+                }
+            }
+            $bind_result = @ ldap_bind( $ldap_connection, $LDAP['admin_bind_dn'], $LDAP['admin_bind_pwd']);
+
+            if ($bind_result != TRUE) {
+                $this_error = "Failed to bind to ${LDAP['uri']} as ${LDAP['admin_bind_dn']}";
+                if ($LDAP_DEBUG == TRUE) {
+                    $this_error .= " with password ${LDAP['admin_bind_pwd']}";
+                }
+                $this_error .= ": " . ldap_error($ldap_connection);
+                print "Problem: Failed to bind as ${LDAP['admin_bind_dn']}";
+                error_log("$log_prefix $this_error",0);
+                exit(1);
+            } else if ($LDAP_DEBUG == TRUE) {
+                error_log("$log_prefix Bound to ${LDAP['uri']} as ${LDAP['admin_bind_dn']}",0);
+            }
+            return $ldap_connection;
+        }
+
+        //Updte login time to your ldap server
+        //Example ou=people,ou=eai.in.th,ou=domains,dc=eai,dc=th
+        function ldap_log($user) {
+            $ldap_connection = open_ldap_connection();
+            $to_update["lastlogintime"] = time();
+            list($local, $domain) = explode('@', $user);
+            $updated_login_log = ldap_mod_replace($ldap_connection, "cn=$local,ou=your_ou_value,ou=your_ou_value,ou=domains,dc=your_dc_value,dc=your_dc_value", $to_update);
+        }
+        ldap_log($auth['user']);
 ```
 
 This is not the best solution yet. Please feel free to fork or modified this repositories.
