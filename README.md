@@ -15,6 +15,8 @@ installation is highly recommended.
 
 2. This is a modified version by [THNIC foundation](https://xn--42cl2bj2hxbd2g.xn--12cfi8ixb8l.xn--o3cw4h/) to make a Roundcube Webmail can loging by using EAI (Email Address Internationalization) focus on Thai language. 
 
+3. This is a proof of concept version (POC) 
+
 INTRODUCTION
 ------------
 Roundcube Webmail is a browser-based multilingual IMAP client with an
