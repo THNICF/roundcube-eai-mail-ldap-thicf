@@ -134,6 +134,13 @@ The LDAP script to save log data to your ldap (Can delete if not use):
         ldap_log($auth['user']);
 ```
 
+Also we have modified 3 files to make Adress book and Sending EAI mail working:
+
+1. rcmail_sendmail.php
+2. rcube_utils.php
+3. rcube_user.php
+
+
 This is not the best solution yet. Please feel free to fork or modified this repositories.
 
 LICENSE
